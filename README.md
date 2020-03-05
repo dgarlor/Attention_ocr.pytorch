@@ -7,7 +7,6 @@ This repository implements the the encoder and decoder model with attention mode
 Earlier I had an open source version, but had some problems identifying images of fixed width. Recently I modified the model to support image recognition with variable width. The function is the same as CRNN. Due to the time problem, there is no pre-training model this time, which will be updated later.
 
 # requirements
-opencv_python
 ```bash
 cd Attention_ocr.pytorch
 pip install -r requirements.txt
