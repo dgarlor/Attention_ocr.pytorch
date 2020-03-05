@@ -1,11 +1,12 @@
 attention-ocr.pytorch:Encoder+Decoder+attention model
 ======================================
+Updating code for pytorch 1.1.0
+
 
 This repository implements the the encoder and decoder model with attention model for OCR, the encoder uses CNN+Bi-LSTM, the decoder uses GRU. This repository is modified from https://github.com/meijieru/crnn.pytorch  
 Earlier I had an open source version, but had some problems identifying images of fixed width. Recently I modified the model to support image recognition with variable width. The function is the same as CRNN. Due to the time problem, there is no pre-training model this time, which will be updated later.
 
 # requirements
-pytorch 0.4.1  
 opencv_python
 ```bash
 cd Attention_ocr.pytorch
