@@ -49,7 +49,7 @@ class strLabelConverterForAttention(object):
         Returns:
             torch.IntTensor targets:max_length × batch_size
         """
-        if isinstance(text, unicode):
+        if isinstance(text, str):
             text = [self.dict[item] for item in text]
         elif isinstance(text, collections.Iterable):
             text = [self.encode(s) for s in text]           # 编码

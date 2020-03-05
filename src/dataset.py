@@ -42,8 +42,12 @@ class listDataset(Dataset):
 
         if self.transform is not None:
             img = self.transform(img)
-
-        label = line_splits[1].decode('utf-8')
+        if len(line_splits) == 2:
+            label = line_splits[1] #.decode('utf-8')
+        elif len(line_splits) > 2:
+            label = " ".join(line_splits[1:])
+        else:
+            label = ""
 
         if self.target_transform is not None:
             label = self.target_transform(label)
