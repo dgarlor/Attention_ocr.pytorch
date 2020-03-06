@@ -12,6 +12,7 @@ import src.utils
 import src.dataset
 from PIL import Image
 import models.crnn_lang as crnn
+from models.summary import model_summary
 import argparse
 
 use_gpu = True
@@ -64,8 +65,9 @@ if __name__ == "__main__":
     # decoder = crnn.decoder(256, nclass)     # seq to seq的解码器, nclass在decoder中还加了2
     decoder = crnn.decoderV2(hidden, nclass)
     print(encoder)
+    model_summary(encoder.cnn)
     print(decoder)
-
+    model_summary(decoder)
     if encoder_path and decoder_path:
         print('loading pretrained models ......')
         try:
@@ -116,7 +118,11 @@ if __name__ == "__main__":
         decoder_output, decoder_hidden, decoder_attention = decoder(
             decoder_input, decoder_hidden, encoder_out)
         probs = torch.exp(decoder_output)
+        import numpy
+        with open("log","a") as p:
+         p.write(str([int(i) for i in torch.log(decoder_attention.data).squeeze()])+"\n")
         #decoder_attentions[di] = decoder_attention.data
+
         topv, topi = decoder_output.data.topk(1)
         ni = topi.squeeze(1)
         decoder_input = ni
