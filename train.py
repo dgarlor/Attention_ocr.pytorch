@@ -11,7 +11,6 @@ import os
 import src.utils as utils
 import src.dataset as dataset
 import time
-from src.utils import alphabet
 from src.utils import weights_init
 
 import models.crnn_lang as crnn
@@ -33,6 +32,7 @@ if __name__ == '__main__':
     parser.add_argument('--nh', type=int, default=32, help='size of the lstm hidden state')
     parser.add_argument('--max_width', type=int, default=500, help='the width of the featuremap out from cnn')
     parser.add_argument('--niter', type=int, default=50, help='number of epochs to train for')
+    parser.add_argument('--alphabet', type=str, default="Num", help='Vocabulary type: Num, NumAlpha...')
 
     parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
     parser.add_argument('--cuda', action='store_true', help='enables cuda', default=False)
@@ -88,6 +88,21 @@ if __name__ == '__main__':
         collate_fn=dataset.alignCollate(imgH=opt.imgH, imgW=opt.imgW, keep_ratio=opt.keep_ratio))
 
     test_dataset = dataset.listDataset(list_file =opt.vallist, transform=dataset.resizeNormalize((opt.imgW, opt.imgH)))
+
+    if not opt.alphabet:
+        from src.utils import alphabet
+    elif opt.alphabet == "Num":
+        alphabet = "0123456789"
+    elif opt.alphabet == "NumSpace":
+        alphabet = "0123456789 "
+    elif opt.alphabet == "NumAlpha":
+        alphabet = "0123456789abcdefghijklmnopqrstuvwxyz"
+    elif opt.alphabet == "NumAlphaSpace":
+        alphabet = "0123456789abcdefghijklmnopqrstuvwxyz "
+    else:
+        print(" ** Error in alphabet:",opt.alphabet)
+        sys.exit(1)
+
 
     nclass = len(alphabet) + 3          # decoder的时候，需要的类别数,3 for SOS,EOS和blank 
     print(" -- Number of classes:", nclass)
