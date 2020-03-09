@@ -89,20 +89,7 @@ if __name__ == '__main__':
 
     test_dataset = dataset.listDataset(list_file =opt.vallist, transform=dataset.resizeNormalize((opt.imgW, opt.imgH)))
 
-    if not opt.alphabet:
-        from src.utils import alphabet
-    elif opt.alphabet == "Num":
-        alphabet = "0123456789"
-    elif opt.alphabet == "NumSpace":
-        alphabet = "0123456789 "
-    elif opt.alphabet == "NumAlpha":
-        alphabet = "0123456789abcdefghijklmnopqrstuvwxyz"
-    elif opt.alphabet == "NumAlphaSpace":
-        alphabet = "0123456789abcdefghijklmnopqrstuvwxyz "
-    else:
-        print(" ** Error in alphabet:",opt.alphabet)
-        sys.exit(1)
-
+    alphabet = src.utils.getAlphabetStr(opt.alphabet)
 
     nclass = len(alphabet) + 3          # decoder的时候，需要的类别数,3 for SOS,EOS和blank 
     print(" -- Number of classes:", nclass)
@@ -236,7 +223,7 @@ if __name__ == '__main__':
         print('Test loss: %f, accuray: %f' % (loss_avg.val(), accuracy))
 
 
-    def trainBatch(encoder, decoder, criterion, encoder_optimizer, decoder_optimizer, teach_forcing_prob=1):
+    def trainBatch(encoder, decoder, train_iter, criterion, encoder_optimizer, decoder_optimizer, teach_forcing_prob=1):
         '''
             target_label:采用后处理的方式，进行编码和对齐，以便进行batch训练
         '''
@@ -295,7 +282,7 @@ if __name__ == '__main__':
                 d.requires_grad = True
             encoder.train()
             decoder.train()
-            cost = trainBatch(encoder, decoder, criterion, encoder_optimizer, 
+            cost = trainBatch(encoder, decoder, train_iter, criterion, encoder_optimizer, 
                               decoder_optimizer, teach_forcing_prob=opt.teaching_forcing_prob)
             loss_avg.add(cost)
             i += 1
@@ -308,8 +295,11 @@ if __name__ == '__main__':
                 print('time elapsed %d' % (t1-t0))
                 t0 = time.time()
 
+        val(encoder, decoder, criterion, 1, dataset=test_dataset, teach_forcing=False)            # batchsize:1
+
         # do checkpointing
-        if epoch % opt.saveInterval == 0:
+        if (epoch+1) % opt.saveInterval == 0:
+            print(" -- Saving checkpoint",epoch)
             val(encoder, decoder, criterion, 1, dataset=test_dataset, teach_forcing=False)            # batchsize:1
             torch.save(
                 encoder.state_dict(), '{0}/encoder_{1}.pth'.format(opt.experiment, epoch))

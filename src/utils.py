@@ -12,10 +12,25 @@ import random
 import numpy as np
 import cv2
 
-with open('./data/char_std_5990.txt') as f:
-    data = f.readlines()
-    alphabet = [x.rstrip() for x in data]
-    alphabet = ''.join(alphabet).decode('utf-8')        # python2不加decode的时候会乱码
+
+def getAlphabetStr(name):
+    if not name:
+        with open('./data/char_num.txt') as f:
+            data = f.readlines()
+            alphabet = [x.rstrip() for x in data]
+            alphabet = ''.join(alphabet)#.decode('utf-8')        # python2不加decode的时候会乱码
+    elif name == "Num":
+        alphabet = "0123456789"
+    elif name == "NumSpace":
+        alphabet = "0123456789 "
+    elif name == "NumAlpha":
+        alphabet = "0123456789abcdefghijklmnopqrstuvwxyz"
+    elif name == "NumAlphaSpace":
+        alphabet = "0123456789abcdefghijklmnopqrstuvwxyz "
+    else:
+        print(" ** Error in alphabet:",name)
+        sys.exit(1)
+    return alphabet 
 
 
 class strLabelConverterForAttention(object):
