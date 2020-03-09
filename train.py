@@ -11,7 +11,6 @@ import os
 import src.utils as utils
 import src.dataset as dataset
 import time
-from src.utils import weights_init
 
 import models.crnn_lang as crnn
 
@@ -89,7 +88,7 @@ if __name__ == '__main__':
 
     test_dataset = dataset.listDataset(list_file =opt.vallist, transform=dataset.resizeNormalize((opt.imgW, opt.imgH)))
 
-    alphabet = src.utils.getAlphabetStr(opt.alphabet)
+    alphabet = utils.getAlphabetStr(opt.alphabet)
 
     nclass = len(alphabet) + 3          # decoder的时候，需要的类别数,3 for SOS,EOS和blank 
     print(" -- Number of classes:", nclass)
@@ -103,8 +102,8 @@ if __name__ == '__main__':
     encoder = crnn.CNN(opt.imgH, nc, opt.nh)
     # decoder = crnn.decoder(opt.nh, nclass, dropout_p=0.1, max_length=opt.max_width)        # max_length:w/4,为encoder特征提取之后宽度方向上的序列长度
     decoder = crnn.decoderV2(opt.nh, nclass, dropout_p=0.1)        # For prediction of an indefinite long sequence
-    encoder.apply(weights_init)
-    decoder.apply(weights_init)
+    encoder.apply(utils.weights_init)
+    decoder.apply(utils.weights_init)
     # continue training or use the pretrained model to initial the parameters of the encoder and decoder
     if opt.encoder:
         print('loading pretrained encoder model from %s' % opt.encoder)
@@ -130,6 +129,7 @@ if __name__ == '__main__':
 
     # loss averager
     loss_avg = utils.averager()
+    loss_epoch = utils.averager()
 
     # setup optimizer
     if opt.adam:
@@ -145,7 +145,6 @@ if __name__ == '__main__':
 
 
     def val(encoder, decoder, criterion, batchsize, dataset, teach_forcing=False, max_iter=100):
-        print('Start val')
 
         for e, d in zip(encoder.parameters(), decoder.parameters()):
             e.requires_grad = False
@@ -221,7 +220,7 @@ if __name__ == '__main__':
 
         accuracy = n_correct / float(n_total)
         print('Test loss: %f, accuray: %f' % (loss_avg.val(), accuracy))
-
+        return (loss_avg.val(), accuracy)
 
     def trainBatch(encoder, decoder, train_iter, criterion, encoder_optimizer, decoder_optimizer, teach_forcing_prob=1):
         '''
@@ -272,9 +271,16 @@ if __name__ == '__main__':
         decoder_optimizer.step()
         return loss
 
+    if opt.experiment:
+        # write log with all epochs history
+        with open(opt.experiment+os.sep+"log.csv","w") as p:
+            p.write("train_loss, test_loss, acc\n")
+
     t0 = time.time()
     for epoch in range(opt.niter):
         train_iter = iter(train_loader)
+        loss_epoch.reset()
+        loss_avg.reset()
         i = 0
         while i < len(train_loader)-1:
             for e, d in zip(encoder.parameters(), decoder.parameters()):
@@ -285,6 +291,7 @@ if __name__ == '__main__':
             cost = trainBatch(encoder, decoder, train_iter, criterion, encoder_optimizer, 
                               decoder_optimizer, teach_forcing_prob=opt.teaching_forcing_prob)
             loss_avg.add(cost)
+            loss_epoch.add(cost)
             i += 1
 
             if i % opt.displayInterval == 0:
@@ -295,12 +302,18 @@ if __name__ == '__main__':
                 print('time elapsed %d' % (t1-t0))
                 t0 = time.time()
 
-        val(encoder, decoder, criterion, 1, dataset=test_dataset, teach_forcing=False)            # batchsize:1
+        loss,acc = val(encoder, decoder, criterion, 1, dataset=test_dataset, teach_forcing=False)            # batchsize:1
+        
+
+        if opt.experiment:
+            # write log with all epochs history
+            with open(opt.experiment+os.sep+"log.csv","a") as p:
+                p.write("%1.5f; %1.5f; %1.5f\n"%(loss_epoch.val(), loss, acc))
+
 
         # do checkpointing
         if (epoch+1) % opt.saveInterval == 0:
             print(" -- Saving checkpoint",epoch)
-            val(encoder, decoder, criterion, 1, dataset=test_dataset, teach_forcing=False)            # batchsize:1
             torch.save(
                 encoder.state_dict(), '{0}/encoder_{1}.pth'.format(opt.experiment, epoch))
             torch.save(
