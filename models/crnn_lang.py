@@ -4,28 +4,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.nn.parameter import Parameter
+from .bidirectional import BidirectionalLSTM
 
 GO = 0
 EOS_TOKEN = 1              # 结束标志的标签
 
-class BidirectionalLSTM(nn.Module):
-
-    def __init__(self, nIn, nHidden, nOut):
-        super(BidirectionalLSTM, self).__init__()
-
-        self.rnn = nn.LSTM(nIn, nHidden, bidirectional=True)
-        self.embedding = nn.Linear(nHidden * 2, nOut)
-
-    def forward(self, input):
-        recurrent, _ = self.rnn(input)
-        T, b, h = recurrent.size()
-        t_rec = recurrent.view(T * b, h)
-
-        output = self.embedding(t_rec)  # [T * b, nOut]
-        output = output.view(T, b, -1)
-
-        return output
-   
 
 class AttentionCell(nn.Module):
     def __init__(self, input_size, hidden_size, num_embeddings=128):
