@@ -10,10 +10,11 @@ import numpy as np
 import os
 import src.utils as utils
 import src.dataset as dataset
+import src.h5dataset as h5dataset
 import time
 
 import models.crnn_lang as crnn
-
+from models.summary import model_summary
 
 
 SOS_token = 0
@@ -22,29 +23,32 @@ BLANK = 2                  # blank for padding
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--trainlist',  default='train_list.txt')
-    parser.add_argument('--vallist',  default='test_list.txt')
+    parser.add_argument('--trainlist',  default='elys_train_list.txt')
+    parser.add_argument('--vallist',  default='elys_test_list.txt')
+    parser.add_argument('--outdir', default='./expr/elys2020', help='Where to store samples and models')
 
-    parser.add_argument('--batchSize', type=int, default=32, help='input batch size')
-    parser.add_argument('--imgH', type=int, default=32, help='the height of the input image to network')
-    parser.add_argument('--imgW', type=int, default=992, help='the width of the input image to network')
-    parser.add_argument('--nh', type=int, default=32, help='size of the lstm hidden state')
-    parser.add_argument('--max_width', type=int, default=500, help='the width of the featuremap out from cnn')
+    parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
     parser.add_argument('--niter', type=int, default=50, help='number of epochs to train for')
-    parser.add_argument('--alphabet', type=str, default="Num", help='Vocabulary type: Num, NumAlpha...')
+    parser.add_argument('--imgH', type=int, default=32, help='the height of the input image to network')
+    parser.add_argument('--imgW', type=int, default=800, help='the width of the input image to network')
+    parser.add_argument('--nh', type=int, default=32, help='size of the lstm hidden state')
+    parser.add_argument('--cnn_size', type=int, default=16, help='CNN kernel size')
+    parser.add_argument('--dropout', type=float, default=0.1, help='Decoder Dropout')
+    
+    parser.add_argument('--max_width', type=int, default=500, help='the width of the featuremap out from cnn')
+    parser.add_argument('--alphabet', type=str, default="NumAlphaSpace", help='Vocabulary type: Num, NumAlpha...')
 
-    parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
-    parser.add_argument('--cuda', action='store_true', help='enables cuda', default=False)
+    parser.add_argument('--workers', type=int, help='number of data loading workers', default=4)
+    parser.add_argument('--cuda', action='store_true', help='enables cuda', default=True)
     parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
 
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate for Critic, default=0.00005')
     parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
     parser.add_argument('--encoder', type=str, default='', help="path to encoder (to continue training)")
     parser.add_argument('--decoder', type=str, default='', help='path to decoder (to continue training)')
-    parser.add_argument('--experiment', default='./expr/attentioncnn', help='Where to store samples and models')
-    parser.add_argument('--displayInterval', type=int, default=10, help='Interval to be displayed')
+    parser.add_argument('--displayInterval', type=int, default=50, help='Interval to be displayed')
     parser.add_argument('--valInterval', type=int, default=1, help='Interval to be displayed')
-    parser.add_argument('--saveInterval', type=int, default=10, help='Interval to be displayed')
+    parser.add_argument('--saveInterval', type=int, default=1, help='Interval to be displayed')
     parser.add_argument('--adam', default=True, action='store_true', help='Whether to use adam (default is rmsprop)')
     parser.add_argument('--adadelta', action='store_true', help='Whether to use adadelta (default is rmsprop)')
     parser.add_argument('--keep_ratio', action='store_true', help='whether to keep ratio for image resize')
@@ -52,15 +56,17 @@ if __name__ == '__main__':
     parser.add_argument('--teaching_forcing_prob', type=float, default=0.5, help='where to use teach forcing')
     opt = parser.parse_args()
 
+    
     print(crnn.__name__)
-    print(opt)
 
-    if opt.experiment is None:
-        opt.experiment = 'expr'
-    if not os.path.exists(opt.experiment):
-        os.makedirs(opt.experiment)
+    if opt.outdir is None:
+        opt.outdir = 'expr'
+    if not os.path.exists(opt.outdir):
+        os.makedirs(opt.outdir)
     else:
-        print(" ** Running experiment folder already exists:",opt.experiment)
+        print(" ** Running experiment folder already exists:",opt.outdir)
+        
+    import json
 
     opt.manualSeed = random.randint(1, 10000)  # fix seed
     print("Random Seed: ", opt.manualSeed)
@@ -74,7 +80,19 @@ if __name__ == '__main__':
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
     transform = None
-    train_dataset = dataset.listDataset(list_file =opt.trainlist, transform=transform)
+    if opt.trainlist.lower().endswith(".h5"):
+        train_dataset = h5dataset.H5Dataset(opt.trainlist)
+        opt.imgW, h= train_dataset.imaDims()
+        opt.imgH = int(16 * round(h/16))
+        print(" ** TrainSize:",(opt.imgW,opt.imgH))
+        opt.max_width = train_dataset.prof_lenght
+    else:
+        train_dataset = dataset.listDataset(list_file =opt.trainlist, transform=transform)
+
+    print(" -- Saving parameters json:")
+    with open(opt.outdir+os.sep+"params.json","w") as p:
+        p.write(json.dumps(vars(opt)))
+
     assert train_dataset
     if not opt.random_sample:
         sampler = dataset.randomSequentialSampler(train_dataset, opt.batchSize)
@@ -86,7 +104,14 @@ if __name__ == '__main__':
         num_workers=int(opt.workers),
         collate_fn=dataset.alignCollate(imgH=opt.imgH, imgW=opt.imgW, keep_ratio=opt.keep_ratio))
 
-    test_dataset = dataset.listDataset(list_file =opt.vallist, transform=dataset.resizeNormalize((opt.imgW, opt.imgH)))
+    if opt.vallist.endswith(".h5"):
+        #h5file, datasetImage='/train/image', datasetProf='/train/prof'        
+        test_dataset = h5dataset.H5Dataset(opt.vallist, 
+                                                datasetImage='/test/image', 
+                                                datasetProf='/test/prof',
+                                                transform=dataset.resizeNormalize((opt.imgW, opt.imgH)))
+    else:
+        test_dataset = dataset.listDataset(list_file =opt.vallist, transform=dataset.resizeNormalize((opt.imgW, opt.imgH)))
 
     alphabet = utils.getAlphabetStr(opt.alphabet)
 
@@ -95,13 +120,15 @@ if __name__ == '__main__':
     nc = 1
 
     converter = utils.strLabelConverterForAttention(alphabet)
+    alphabet = utils.getAlphabetStr(opt.alphabet)
+
     # criterion = torch.nn.CrossEntropyLoss()
     criterion = torch.nn.NLLLoss()              # 最后的输出要为log_softmax
 
 
-    encoder = crnn.CNN(opt.imgH, nc, opt.nh)
+    encoder = crnn.CNN(opt.imgH, nc, opt.nh, cnn_size=opt.cnn_size)
     # decoder = crnn.decoder(opt.nh, nclass, dropout_p=0.1, max_length=opt.max_width)        # max_length:w/4,为encoder特征提取之后宽度方向上的序列长度
-    decoder = crnn.decoderV2(opt.nh, nclass, dropout_p=0.1)        # For prediction of an indefinite long sequence
+    decoder = crnn.decoderV2(opt.nh, nclass, dropout_p=opt.dropout)        # For prediction of an indefinite long sequence
     encoder.apply(utils.weights_init)
     decoder.apply(utils.weights_init)
     # continue training or use the pretrained model to initial the parameters of the encoder and decoder
@@ -112,7 +139,9 @@ if __name__ == '__main__':
         print('loading pretrained encoder model from %s' % opt.decoder)
         decoder.load_state_dict(torch.load(opt.decoder))
     print(encoder)
+    model_summary(encoder)
     print(decoder)
+    model_summary(decoder)
 
     image = torch.FloatTensor(opt.batchSize, 3, opt.imgH, opt.imgH)
     text = torch.LongTensor(opt.batchSize * 5)
@@ -196,8 +225,9 @@ if __name__ == '__main__':
                         decoder_input, decoder_hidden, encoder_outputs)
                     loss += criterion(decoder_output, target_variable[di])  # 每次预测一个字符
                     loss_avg.add(loss)
-                    decoder_attention = decoder_attention.squeeze()
-                    decoder_attentions[di-1,:decoder_attention.shape[0]] = decoder_attention.data
+                    # ATTENTION VALUES
+                    #decoder_attention = decoder_attention.squeeze()
+                    #decoder_attentions[di-1,:decoder_attention.shape[0]] = decoder_attention.data
                     topv, topi = decoder_output.data.topk(1)
                     ni = topi.squeeze(1)
                     decoder_input = ni
@@ -271,9 +301,9 @@ if __name__ == '__main__':
         decoder_optimizer.step()
         return loss
 
-    if opt.experiment:
+    if opt.outdir:
         # write log with all epochs history
-        with open(opt.experiment+os.sep+"log.csv","w") as p:
+        with open(opt.outdir+os.sep+"log.csv","w") as p:
             p.write("train_loss, test_loss, acc\n")
 
     t0 = time.time()
@@ -301,13 +331,12 @@ if __name__ == '__main__':
                 t1 = time.time()
                 print('time elapsed %d' % (t1-t0))
                 t0 = time.time()
-
         loss,acc = val(encoder, decoder, criterion, 1, dataset=test_dataset, teach_forcing=False)            # batchsize:1
         
 
-        if opt.experiment:
+        if opt.outdir:
             # write log with all epochs history
-            with open(opt.experiment+os.sep+"log.csv","a") as p:
+            with open(opt.outdir+os.sep+"log.csv","a") as p:
                 p.write("%1.5f; %1.5f; %1.5f\n"%(loss_epoch.val(), loss, acc))
 
 
@@ -315,6 +344,6 @@ if __name__ == '__main__':
         if (epoch+1) % opt.saveInterval == 0:
             print(" -- Saving checkpoint",epoch)
             torch.save(
-                encoder.state_dict(), '{0}/encoder_{1}.pth'.format(opt.experiment, epoch))
+                encoder.state_dict(), '{0}/encoder_{1}.pth'.format(opt.outdir, epoch))
             torch.save(
-                decoder.state_dict(), '{0}/decoder_{1}.pth'.format(opt.experiment, epoch))
+                decoder.state_dict(), '{0}/decoder_{1}.pth'.format(opt.outdir, epoch))
