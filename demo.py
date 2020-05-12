@@ -190,11 +190,8 @@ if __name__ == "__main__":
         if outputdir:
             import numpy as np
             ofile = outputdir + os.sep + os.path.basename(img_path[:-4]+"_weights.jpg")
-            print(np.array(decoder_attentions.data)[:di])
             a = np.log(np.array(decoder_attentions.data)[:di])
-            print(a.shape, "min:",a.min(), "max:",a.max())
             a = 255 + np.clip(a*10,-255,0)
-            print(a.shape, "min:",a.min(), "max:",a.max())
             aima = Image.fromarray(a).convert("L").resize((width,di*4),Image.NEAREST)
 
             oimage = Image.new("L",(width,di*4+height))
